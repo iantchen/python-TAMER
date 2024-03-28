@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import datetime as dt
 import string
+import os
 
 def assert_data_shape_24(data,reverse=False,force_second_dim=True) :
     """Simple function to check if first dimension is 24 hours and, if not, reshapes accordingly
@@ -398,8 +399,8 @@ def format_filename(inp):
     Uses a whitelist approach: any characters not present in valid_chars are
     removed. Also spaces are replaced with underscores.
     
-    Note: this method may produce invalid filenames such as ``, `.` or `..`
-    When using this method, prepend a date string like '2009_01_15_19_46_32_'
+    Note: this method may produce invalid filenames such as "", "." or ".."
+    When using this method, prepend a date string like "2009_01_15_19_46_32_"
     and append a file extension like '.txt', so to avoid the potential of using
     an invalid filename.
 
@@ -419,6 +420,23 @@ def format_filename(inp):
     inp_rpl = inp.replace(' ','_').replace(':','-')
     filename = ''.join(c for c in inp_rpl if c in valid_chars)
     return filename
+
+def daysofyear2date(days,units,exposure_schedule):        
+    if units in ['SED','J m-2','UVIh']:
+            ayear = pd.date_range(start="2010-01-01",end="2010-12-31")
+            dates = np.empty([len(days),1],dtype=object)
+    else:
+            ayear = pd.date_range(start="2010-01-01",end="2010-12-31",freq='h')
+            dates = np.empty([len(days),np.sum(exposure_schedule[0] != 0)],dtype=object)            
+
+    for i,day in enumerate(days): 
+        desired_date = ayear[ayear.strftime('%j').astype(int) == day]
+        if len(desired_date) > 1:
+            desired_date = desired_date[exposure_schedule[0] != 0]
+        dates[i][:] = desired_date
+        #pd.to_datetime(desired_date.strftime('%b %d, %Y'))
+
+    return dates.flatten()
 
 def str2daysofyear(inp) :
     """Interprets a string, list, or array into a list of arrays for days of the year
@@ -525,3 +543,50 @@ def str2daysofyear(inp) :
         out[i] = np.array(out[i])
 
     return out, inp_flt, nonstrings
+
+def automatic_exposure_sequence(example,ES=None,substr="",statistic=["max","min"],unit="SED",match_cmap_limits=None):
+    # function to automatically generate and save UV plots
+    # No exposure schedule
+    if not isinstance(ES,np.ndarray):
+        example = example.collect_data(['annual'],year_selection=[0],units=unit)
+        img_dir='/home/aiantchenk/UVdata/annual' + substr +'/'
+        if not os.path.exists(img_dir): 
+            os.makedirs(img_dir) 
+        example = example.calculate_maps(statistic=statistic)
+        example.save_maps(save=True,show=False,img_dir=img_dir,match_cmap_limits=match_cmap_limits) 
+        example.save_trace(save=True,show=False,img_dir=img_dir)
+        # Yearly averaged over all years
+        example = example.collect_data(['annual'],year_selection=np.sort(example.dataset_years),units=unit)
+        example = example.calculate_maps(statistic=statistic)
+        example.save_maps(save=True,show=False,img_dir=img_dir,match_cmap_limits=match_cmap_limits) 
+        example.save_trace(save=True,show=False,img_dir=img_dir)
+        # then Monthly averaged over all years
+        example = example.collect_data('monthly',year_selection=np.sort(example.dataset_years),units=unit)
+        img_dir='/home/aiantchenk/UVdata/monthly' + substr +'/'
+        if not os.path.exists(img_dir): 
+            os.makedirs(img_dir)         
+        example = example.calculate_maps(statistic=statistic)
+        example.save_maps(save=True,show=False,img_dir=img_dir,match_cmap_limits=match_cmap_limits) 
+        example.save_trace(save=True,show=False,img_dir=img_dir)
+    else: 
+        # Repeat with ES1
+        example = example.collect_data(['annual'],year_selection=[0],units=unit,exposure_schedule=ES)
+        img_dir='/home/aiantchenk/UVdata/annual' + substr +'/'
+        if not os.path.exists(img_dir): 
+            os.makedirs(img_dir)         
+        example = example.calculate_maps(statistic=statistic)
+        example.save_maps(save=True,show=False,img_dir=img_dir,match_cmap_limits=match_cmap_limits) 
+        example.save_trace(save=True,show=False,img_dir=img_dir)
+        # Yearly averaged over all years
+        example = example.collect_data(['annual'],year_selection=np.sort(example.dataset_years),units=unit,exposure_schedule=ES)
+        example = example.calculate_maps(statistic=statistic)
+        example.save_maps(save=True,show=False,img_dir=img_dir,match_cmap_limits=match_cmap_limits) 
+        example.save_trace(save=True,show=False,img_dir=img_dir)
+        # then Monthly averaged over all years
+        example = example.collect_data('monthly',year_selection=np.sort(example.dataset_years),units=unit,exposure_schedule=ES)
+        img_dir='/home/aiantchenk/UVdata/monthly' + substr +'/'
+        if not os.path.exists(img_dir): 
+            os.makedirs(img_dir)         
+        example = example.calculate_maps(statistic=statistic)
+        example.save_maps(save=True,show=False,img_dir=img_dir,match_cmap_limits=match_cmap_limits) 
+        example.save_trace(save=True,show=False,img_dir=img_dir)
