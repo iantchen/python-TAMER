@@ -14,6 +14,10 @@ from cartopy.io import shapereader
 from scipy.interpolate import interp2d
 from scipy.ndimage import zoom
 from .subroutines import *
+from matplotlib.ticker import MaxNLocator
+import matplotlib.dates as mdates
+
+
 
 
 class ExposureMap:
@@ -267,6 +271,7 @@ class ExposureMap:
         dataset_years = [ x for x in data_dir_contents if re.findall(self.src_filename_format.replace("yyyy","[0-9]{4}"),x)]
         dataset_years = [ int(x[char_year:char_year+4]) for x in dataset_years ]
 
+
         # Now we can handle default options like "all"
         if type(self.date_selection) == str and self.date_selection == "all" :
             date_selection = pd.date_range(start=str(dataset_years[0])+"-01-01",
@@ -348,7 +353,6 @@ class ExposureMap:
                 # design overhaul
                 self.lat = dataset['lat'][:]
                 self.lon = dataset['lon'][:]
-
             else :
                 new_num_bins = int(np.nanmax(data) // self.bin_width) + 2 - self.num_bins
                 # check if new data requires extra bins in pix_hist
@@ -1000,6 +1004,9 @@ class ExposureMapSequence :
 
         # declare empty hists
         self.hists = [None for x in range(self.num_hists)]
+        # AI 14th Feb 2024, declare empty radiation vectors to save time-traces with average over lat and long
+        self.trace_UV = [[None for x in range(len(unique_years))] for j in range(self.num_hists)]
+        self.trace_days = [None for x in range(self.num_hists)]
 
         for i in range(len(unique_years)) :
             year = unique_years[i]
@@ -1070,6 +1077,18 @@ class ExposureMapSequence :
                     # TODO: Should expand upon this in reference files
                     temp_data *= {"SED":0.9, "J m-2":90, "UVIh":1, "UVI":1, "W m-2":0.025, "mW m-2":25}[self.hist_specs[j]['units']]
 
+                    # AI feb 14th 2024 take mean over all latitudes and longitudes
+                   # if  self.num_hists == len(unique_years) or len(unique_years) == 1 or i == 0:
+                    self.trace_UV[j][i] = np.nanmean(temp_data,(1,2))
+                     #   /len(self.hist_specs[0]['year_selection'])
+                    self.trace_days[j] = self.hist_specs[j]['day_selection']
+                   # else:
+                     #self.trace_UV[j] +=   np.nanmean(temp_data,(1,2))/len(self.hist_specs[0]['year_selection'])
+                    # self.trace_UV[j,i] =   np.append(self.trace_UV[j], np.nanmean(temp_data,(1,2))
+
+                     #self.trace_UV[j] =   np.append(self.trace_UV[j],(np.nanmean(temp_data,(1,2))))
+                     #self.trace_days[j] = np.append(self.trace_days[j],(self.hist_specs[j]['day_selection']))                       
+
                     # if this is the first iteration, declare a hist
                     if 'num_bins' not in self.hist_specs[j] :
                         # seems like useful metadata to know bin n and edges
@@ -1111,8 +1130,7 @@ class ExposureMapSequence :
 
 
 
-
-    def calculate_maps(self,statistic=None,titles=None,filenames="auto") :
+    def calculate_maps(self,statistic=None,titles=None,filenames="auto") : 
         """Calcualte the maps from the pixel histograms 
 
         This function calculates maps from the pixel histograms and generates
@@ -1174,13 +1192,20 @@ class ExposureMapSequence :
 
         if titles is not None :
             self.titles = titles
+            self.titles_trace = titles
+
         else :
             self.titles = [str(x) for x in range(self.num_hists * len(self.statistic))]
+            self.titles_trace = [str(x) for x in range(self.num_hists * len(self.statistic))]
+
 
         if isinstance(filenames,str) and filenames == "auto" :
             self.filenames = [str(x) for x in range(self.num_hists * len(self.statistic))]
+            self.filenames_trace = [str(x) for x in range(self.num_hists * len(self.statistic))]
+
         else :
             self.filenames = filenames
+            self.filenames_trace = filenames
 
 
         mapnum = 0
@@ -1194,11 +1219,11 @@ class ExposureMapSequence :
 
                 if titles is None :
                     if filenames == "auto" :
-                        self.titles[mapnum], self.filenames[mapnum] = gen_map_title(**{
+                        self.titles[mapnum], self.titles_trace[mapnum],self.filenames[mapnum],self.filenames_trace[mapnum] = gen_map_title(**{
                             **self.hist_specs[j],
                             'statistic':self.statistic[i]},filename=True)
                     else :
-                        self.titles[mapnum] = gen_map_title(**{
+                        self.titles[mapnum],self.titles_trace[mapnum] = gen_map_title(**{
                             **self.hist_specs[j],
                             'statistic':self.statistic[i]},filename=False)
 
@@ -1214,9 +1239,43 @@ class ExposureMapSequence :
         return self
 
 
+    def save_trace(self,trace_options=None,save=False,show=True,img_dir='',img_size=[20,15]) : 
+        """Calculate the trace: UV dose as a function of time averaged over all lat and long
+
+        This function calculates maps from the pixel histograms and generates
+        titles and filenames for each map. Note that the number of maps can
+        be greater than the number of pixel histograms if more than one 
+        statistic is specified."""
+
+        # also plot one year, each month
+        for i in range(self.num_hists):
+            plt.figure(figsize=(img_size[0]/2.54,img_size[1]/2.54))
+            
+            X = daysofyear2date(self.trace_days[i],self.units[0],self.exposure_schedule)
+            
+            plt.title(self.titles_trace[i])
+            plt.plot(X, np.nanmean(list(filter(lambda item: item is not None,self.trace_UV[i])),axis=0), 'o',color='blue')
+            plt.ylabel(self.units[0], fontsize=12)  # Add y-axis label with font size
+
+            plt.gca().xaxis.set_major_locator(MaxNLocator(20))
+            plt.grid(True)
+            plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%b-%d'))
+            plt.xticks(rotation=45,ha='right')
+
+            if show: 
+                plt.tight_layout()
+                plt.show()
+            
+            if save:
+                img_filename = self.filenames_trace[i]
+                img_filetype = 'png'
+                img_dpi = 300
+                plt.savefig(img_dir+img_filename+"."+img_filetype,
+                        bbox_inches="tight",dpi=img_dpi)        
+        
 
 
-    def save_maps(self,map_options=None,save=None,show=True,match_cmap_limits=True,schedule_diagram=True) :
+    def save_maps(self,map_options=None,save=None,show=True,match_cmap_limits=True,schedule_diagram=True,img_dir = '') :
         """Renders and saves the pre-calculated maps stored in the object
 
         With the maps calculated, this function renders the maps with broad flexibility on aesthetic 
@@ -1235,9 +1294,11 @@ class ExposureMapSequence :
         show : bool, optional
             An option to show the maps in a python figure window or not.
 
-        match_cmap_limits : bool, optional
+        match_cmap_limits : bool, list, optional
             When producing multiple maps, it can sometimes be desirable for the colormap limits
             to be consistent across the set of images. This boolean enables that.
+
+            can also be a list to fix limits match_cmap_limits[0],match_cmap_limits[1]
 
         schedule_diagram : bool, optional
             If true, a circular diagram is rendered on the map illustrating the schedule that
@@ -1250,8 +1311,9 @@ class ExposureMapSequence :
 
         if save is not None and isinstance(save,bool) :
             self.map_options['save'] = save
-
-        if match_cmap_limits :
+        if type(match_cmap_limits) == list:
+             self.map_options['cmap_limits'] = [match_cmap_limits[0],match_cmap_limits[1]]
+        elif match_cmap_limits:
             self.map_options['cmap_limits'] = [np.nanmin(self.maps),np.nanmax(self.maps)]
             if self.map_options['cmap_limits'][0] < 0.1 * self.map_options['cmap_limits'][1] :
                 self.map_options['cmap_limits'][0] = 0
@@ -1269,11 +1331,8 @@ class ExposureMapSequence :
                 lon=self.lon,
                 cbar_label=self.hist_specs[self.map_specs['hist'][i]]['units'],
                 show=show,
+                img_dir=img_dir,
                 **opts)
-
-
-
-
 
 
 
@@ -1301,8 +1360,8 @@ cbar_limits=None,
 cbar_label=None,
 country_focus="CHE",
 gridlines=True,
-gridlines_dms=False,
-mch_logo=True) :
+gridlines_dms=True,
+mch_logo=False) :
     """Renders and saves maps
 
     Renders and saves maps with a wide variety of aesthetic options.
@@ -1544,6 +1603,7 @@ year_selection=None,
 day_selection=None,
 filename=False,
 **kwargs) :
+       # AI added trace option Feb 21 20204
 
     if units in ['SED','J m-2','UVIh'] :
         if all(exposure_schedule == np.ones(24)) :
@@ -1560,7 +1620,6 @@ filename=False,
     else :
         raise ValueError('Units must be SED, J m-2, UVIh, UVI, W m-2, or mW m-2')
     
-    title = statistic + ' of ' + title
 
     ayear = pd.date_range(start="2010-01-01",end="2010-12-31")
     ds = {'year' : ayear.dayofyear.values.tolist()}
@@ -1610,6 +1669,9 @@ filename=False,
         # TODO: potentially make this workable with "custom day selection" placeholder in title
         raise ValueError("Day selection not recognised, auto-title cannot proceed")
 
+    title_trace = 'Spatially averaged ' + title
+    title = statistic + ' of ' + title
+
     if filename :
         custom = False
         filename = "UV." + units + '.' + statistic + '.'
@@ -1644,9 +1706,11 @@ filename=False,
         if custom :
             filename = filename + '.created_' + dt.datetime.now().strftime('%Y%m%d_%H%M%S')
         filename = format_filename(filename)
-        return title, filename
+            
+        filename_trace='trace_' + filename
+        return title,title_trace,filename,filename_trace
     else :
-        return title
+        return title, title_trace
     
 
 
