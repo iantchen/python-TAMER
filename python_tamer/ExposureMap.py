@@ -16,6 +16,8 @@ from scipy.ndimage import zoom
 from .subroutines import *
 from matplotlib.ticker import MaxNLocator
 import matplotlib.dates as mdates
+import shapefile as shp
+from pyproj import Transformer
 
 
 
