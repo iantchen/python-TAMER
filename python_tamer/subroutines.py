@@ -3,6 +3,8 @@ import pandas as pd
 import datetime as dt
 import string
 import os
+import shapefile as shp
+from pyproj import Transformer
 
 def assert_data_shape_24(data,reverse=False,force_second_dim=True) :
     """Simple function to check if first dimension is 24 hours and, if not, reshapes accordingly
@@ -590,3 +592,62 @@ def automatic_exposure_sequence(example,ES=None,substr="",statistic=["max","min"
         example = example.calculate_maps(statistic=statistic)
         example.save_maps(save=True,show=False,img_dir=img_dir,match_cmap_limits=match_cmap_limits) 
         example.save_trace(save=True,show=False,img_dir=img_dir)
+
+def select_box_canton(canton_abbr):
+    ''' Return the latitude-longitude box containing the selected canton.
+        Return also longitude and latitude coordinates for plotting purposes.
+        
+        Canton names input are in each canton's initials:
+    '''
+    # set path to file containing cantons data and shapes
+    canton_file = '../test/g2k16vz.shp'
+    # open file
+    sf   = shp.Reader(canton_file)
+    # Dictionary for canton assignment
+    canton_dict = {'ZH' : 'Zurich',
+                   'BE' : 'Bern / Berne',
+                   'LU' : 'Luzern',
+                   'UR' : 'Uri',
+                   'OW' : 'Obwalden',
+                   'NW' : 'Nidwalden',
+                   'SW' : 'Scwyz',
+                   'GL' : 'Glarus',
+                   'ZG' : 'Zug',
+                   'FR' : 'Fribourg / Freiburg', 
+                   'SO' : 'Solothurn', 
+                   'BS' : 'Basel-Stadt',
+                   'BL' : 'Basel-Landschaft',
+                   'SH' : 'Schaffhausen',
+                   'AR' : 'Appenzell Ausserrhoden',
+                   'AI' : 'Appenzell Innerrhoden',
+                   'SG' : 'St. Gallen',
+                   'GR' : 'Graubünden / Grigioni / Grischun',
+                   'AG' : 'Aargau',
+                   'TG' : 'Thurgau',
+                   'TI' : 'Ticino',
+                   'VD' : 'Vaud',
+                   'VS' : 'Valais / Wallis',
+                   'NE' : 'Neuchâtel',
+                   'GE' : 'Genève',
+                   'JU' : 'Jura'} 
+                    
+    for initials in canton_dict:
+        if initials == canton_abbr:
+            canton_name =  canton_dict[initials] 
+
+    # iterate over shapes and records
+    for shapeRec in sf.iterShapeRecords():
+        if canton_name in shapeRec.record['KTNAME']:
+            coords    = shapeRec.shape.points 
+            # access first and second element of all tuples in the coord list
+            s_longitude = list(zip(*coords))[0]
+            s_latitude  = list(zip(*coords))[1]
+    # convert swiss coordinates to latitude and longitude
+    # using Transfromer from pyproj 
+    transformer = Transformer.from_crs("EPSG:21781", "EPSG:4326")
+    # transformer.transform(s_longitude, s_latitude)
+    latitude  = list(transformer.transform(s_longitude, s_latitude))[0]
+    longitude = list(transformer.transform(s_longitude, s_latitude))[1]
+    # define a rectangular box containing the canton shape
+    box       = [min(longitude), min(latitude), max(longitude), max(latitude)] 
+    return box, longitude, latitude
