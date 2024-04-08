@@ -115,6 +115,7 @@ class ExposureMap:
     bin_width = None,
     date_selection=None,
     map_options=None,
+    box = None, # option to implement spatial selection of data
     src_filename_format='UVery.AS_ch02.lonlat_yyyy01010000.nc',
     src_directory='C:/Data/UV/'):
         # assigning options to fields in class with a few basic checks
@@ -251,20 +252,17 @@ class ExposureMap:
 
 
         """
+        print("I'm using the git version of Exposure map py")
+        params = {'src_directory'      : src_directory,
+                  'src_filename_format': src_filename_format,
+                  'date_selection'     : date_selection,
+                  'units'              : units,
+                  'exposure_schedule'  : exposure_schedule,
+                  'bin_width'          : bin_width}
 
-        # TODO: There must be a better way to do this
-        if not (src_directory is None) :
-            self.src_directory = src_directory
-        if not (src_filename_format is None) :
-            self.src_filename_format = src_filename_format
-        if not (date_selection is None) :
-            self.date_selection = date_selection
-        if not (units is None) :
-            self.units = units
-        if not (exposure_schedule is None) :
-            self.exposure_schedule = exposure_schedule
-        if not (bin_width is None) :
-            self.bin_width = bin_width
+        for param, value in params.items():
+            if value is not None:
+                setattr(self, param, value)
 
         # first we read the src_directory to check the total number of unique years available
         data_dir_contents = os.listdir(self.src_directory)
