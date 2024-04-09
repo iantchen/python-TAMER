@@ -528,14 +528,14 @@ def str2daysofyear(inp) :
 
     return out, inp_flt, nonstrings
 
-def select_box_canton(canton_abbr):
+def select_box_canton(canton_abbr, canton_folder):
     ''' Return the latitude-longitude box containing the selected canton.
         Return also longitude and latitude coordinates for plotting purposes.
         
         Canton names input are in each canton's initials:
     '''
     # set path to file containing cantons data and shapes
-    canton_file = '../test/g2k16vz.shp'
+    canton_file = canton_folder + 'g2k16vz.shp'
     # open file
     sf   = shp.Reader(canton_file)
     # Dictionary for canton assignment
